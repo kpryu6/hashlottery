@@ -1,16 +1,71 @@
 const Lottery = artifacts.require("Lottery");
+const assertRevert = require("./assertRevert");
+const expectEvent = require("./expectEvent");
 
 // parameter deployer, user1, user2는 Accounts[0], Accounts[1], Accounts[2]에 각 매핑
 contract("Lottery", function ([deployer, user1, user2]) {
   let lottery;
+  let betAmount = 5 * 10 ** 15;
+  let bet_block_interval = 3;
+
   beforeEach(async () => {
-    console.log("Before each");
     lottery = await Lottery.new();
   });
 
-  it.only("getPot should return current pot", async () => {
+  it("getPot should return current pot", async () => {
     let pot = await lottery.getPot();
     assert.equal(pot, 0);
+  });
+
+  describe("Bet", function () {
+    it("should fail when the bet money is not 0.005 ETH", async () => {
+      // Fail transaction
+      // compile이 되지 않으면서 Not enough ETH라고 에러 메시지가 나옴.
+
+      // fail이 났을때 어떻게 캐치할 것인가?? => Open zepplin
+      // assertRevert가 lottery.bet이 던진 에러를 try catch로 잡아서
+      // revert라는 글자를 들어있는지 확인해보고 들어있으면 제대로 fail 된 것을 캐치했다!! 라는것을 확인
+      await assertRevert(
+        lottery.bet("0xab", { from: user1, value: 4 * 10 ** 15 })
+      );
+      // transaction object {chainId(체인구별), value(이더값), to(목적지 주소), from(나), gas(Limit), gasPrice}
+    });
+
+    it.only("should put the bet to the bet queue with 1 bet", async () => {
+      // bet
+      let receipt = await lottery.bet("0xab", {
+        from: user1,
+        value: 5 * 10 ** 15,
+      });
+
+      //console.log(receipt);
+
+      // 처음엔 0
+      // assert.equal로 확인하는거
+      let pot = await lottery.getPot();
+      assert.equal(pot, 0);
+
+      // check contract balance == 0.005
+      let contractBalance = await web3.eth.getBalance(lottery.address);
+      assert.equal(contractBalance, betAmount);
+
+      // check bet info
+      let currentBlockNumber = await web3.eth.getBlockNumber();
+      let bet = await lottery.getBetInfo(0);
+
+      assert.equal(
+        bet.answerBlockNumber,
+        currentBlockNumber + bet_block_interval
+      );
+      assert.equal(bet.bettor, user1);
+      assert.equal(bet.challenges, "0xab");
+
+      // log
+
+      //console.log(receipt);
+
+      await expectEvent.inLogs(receipt.logs, "BET");
+    });
   });
 });
 
