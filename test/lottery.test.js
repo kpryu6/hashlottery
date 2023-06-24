@@ -8,6 +8,7 @@ contract("Lottery", function ([deployer, user1, user2]) {
   let betAmount = 5 * 10 ** 15;
   let bet_block_interval = 3;
 
+  // lottery
   beforeEach(async () => {
     lottery = await Lottery.new();
   });
@@ -31,7 +32,7 @@ contract("Lottery", function ([deployer, user1, user2]) {
       // transaction object {chainId(체인구별), value(이더값), to(목적지 주소), from(나), gas(Limit), gasPrice}
     });
 
-    it.only("should put the bet to the bet queue with 1 bet", async () => {
+    it("should put the bet to the bet queue with 1 bet", async () => {
       // bet
       let receipt = await lottery.bet("0xab", {
         from: user1,
@@ -65,6 +66,29 @@ contract("Lottery", function ([deployer, user1, user2]) {
       //console.log(receipt);
 
       await expectEvent.inLogs(receipt.logs, "BET");
+    });
+  });
+
+  describe.only("isMatch", function () {
+    let blockHash =
+      "0xab2bd97559f56324cf0ae225291ddd657fdb300b8994b299b891d29465a58e11"; // 아무 hash 값 단순 테스트용
+
+    it("should be BettingResult.Win when 2 characters match appropriately", async () => {
+      let matchingResult = await lottery.isMatch("0xab", blockHash);
+      assert.equal(matchingResult, 0); // 0 = Win
+    });
+
+    it("should be BettingResult.Fail when 2 characters match appropriately", async () => {
+      let matchingResult = await lottery.isMatch("0xcd", blockHash);
+      assert.equal(matchingResult, 1); // 1 = Fail
+    });
+
+    it("should be BettingResult.Draw when 2 characters match appropriately", async () => {
+      let matchingResult = await lottery.isMatch("0xac", blockHash);
+      assert.equal(matchingResult, 2); // 2 = Draw
+
+      matchingResult = await lottery.isMatch("0xfb", blockHash);
+      assert.equal(matchingResult, 2); // 2 = Draw
     });
   });
 });
