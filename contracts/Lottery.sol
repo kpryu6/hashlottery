@@ -6,7 +6,7 @@ contract Lottery{
     
     struct BetInfo {
         uint256 answerBlockNumber;
-        // payable? ?? transfer ??
+        // payable ???? transfer ??
         address payable bettor;
         bytes1 challenges; //0xab
     }
@@ -90,13 +90,13 @@ contract Lottery{
     function pushBet(bytes1 challenges) internal returns (bool) {
         BetInfo memory b;
         // msg.sender? ?? ??? address?? payable ??? bettor ?? ???
-        b.bettor = msg.sender;
+        b.bettor = msg.sender; // 20 byte
 
-        b.answerBlockNumber = block.number + BET_BLOCK_INTERVAL;
-        b.challenges = challenges;
+        b.answerBlockNumber = block.number + BET_BLOCK_INTERVAL; // 32byte -> 20000 gas
+        b.challenges = challenges; // byte -> ?? msg.sender? 20byte + ?? 20000gas
 
         _bets[_tail] = b;
-        _tail++;
+        _tail++; // 32byte ? ?? // 20000 gas
 
         return true;
     }
