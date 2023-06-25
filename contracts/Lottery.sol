@@ -18,7 +18,7 @@ contract Lottery{
     mapping (uint256 => BetInfo) private _bets;
 
     // ??
-    address public owner;
+    address payable public owner;
     
     // BLOCK HASH로 확인할 수 있는 제한 256
     uint256 constant internal BLOCK_LIMIT = 256;
@@ -32,6 +32,9 @@ contract Lottery{
     // pot money ??
     uint256 private _pot;
 
+    bool private mode = false; // false : test mode(use answer for test), true : real mode(use real block hash)
+    bytes32 public answerForTest;
+
 
     // BlockStatus Enum
     enum BlockStatus { Checkable, NotRevealed, BlockLimitPassed}
@@ -40,8 +43,11 @@ contract Lottery{
     enum BettingResult { Win, Fail, Draw}
 
     // EVENT
-    event BET(uint256 index, address bettor, uint256 amount, bytes1 challenges, uint answerBlockNumber); // emit 자체 375gas + 파라미터 하나 당 375 gas + 파라미터 저장 될때 byte당 8gas => 4~5000 gas 
-
+    event BET(uint256 index, address bettor, uint256 amount, bytes1 challenges, uint256 answerBlockNumber); // emit 자체 375gas + 파라미터 하나 당 375 gas + 파라미터 저장 될때 byte당 8gas => 4~5000 gas 
+    event WIN(uint256 index, address bettor, uint256 amount, bytes1 challenges, bytes1 answer, uint256 answerBlockNumber);
+    event FAIL(uint256 index, address bettor, uint256 amount, bytes1 challenges, bytes1 answer, uint256 answerBlockNumber);
+    event DRAW(uint256 index, address bettor, uint256 amount, bytes1 challenges, bytes1 answer, uint256 answerBlockNumber);
+    event REFUND(uint256 index, address bettor, uint256 amount, bytes1 challenges, uint256 answerBlockNumber);
     // Constructor
     constructor() public {
         owner = msg.sender;
@@ -80,11 +86,22 @@ contract Lottery{
     
 
     //Distribute 검증
+
+    /*
+    * @dev 베팅 결과값을 확인하고 팟머니를 분배한다.
+    * 정답 실패 : 팟머니 축적
+    * 정답 성공 : 팟머니 획득
+    * 한글자맞춤 or 정답 확인 불가 : 배팅 금액만 획득
+    */
+
     function distribute() public {
         // head 3 4 5 ... 11 12 tail
         uint256 cur;
+        uint256 transferAmount;
+
         BetInfo memory b;
         BlockStatus currentBlockStatus;
+        BettingResult currentBettingResult;
 
         for (cur = _head; cur < _tail; cur++) {
 
@@ -94,11 +111,41 @@ contract Lottery{
 
             // Checkable : (block.number > answerBlockNumber) && (block.number < BLOCK_LIMIT + answerBlockNumber) (현재 블록보다 256 전까지만 확인할 수 있다 이게무슨말이지?)
             if (currentBlockStatus == BlockStatus.Checkable) {
+
+                bytes32 answerBlockHash = getAnswerBlockHash(b.answerBlockNumber);
+
+                currentBettingResult = isMatch(b.challenges,answerBlockHash);
                 // if win , bettor가 pot money 가져감
+                if (currentBettingResult == BettingResult.Win) {
+                    // transfer pot
+                    transferAmount = transferAfterPayingFee(b.bettor, _pot + BET_AMOUNT);
+                    // pot = 0
+                    _pot = 0;
+                    // 여기서 transfer하고 _pot=0을 했는데, call이나 send일 경우엔 먼저 _pot을 임시변수에 저장해놓고 임시변수를 통해 전송을 한다음 진행하는게 안전
+
+                    // emit Win event
+                    emit WIN(cur, b.bettor, transferAmount, b.challenges, answerBlockHash[0], b.answerBlockNumber);
+
+                }
 
                 // if fail, bettor의 돈이 pot으로 감
+                if (currentBettingResult == BettingResult.Fail) {
+                    // pot = pot + BET_AMOUNT
+                    _pot += BET_AMOUNT;
+                    // emit Fail event
+                    emit FAIL(cur, b.bettor, 0, b.challenges, answerBlockHash[0], b.answerBlockNumber);
+
+                }
 
                 // if draw (한글자만 맞춘 경우), refund bettor's money
+                if (currentBettingResult == BettingResult.Draw) {
+                    // transfer only BET_AMOUNT
+                    transferAmount = transferAfterPayingFee(b.bettor,BET_AMOUNT);
+                    // emit Draw event
+                    emit DRAW(cur, b.bettor, transferAmount, b.challenges, answerBlockHash[0], b.answerBlockNumber);
+
+
+                }
             }
             
             // block이 mining 되지 않은 상태(not revealed) : block.number <= answerBlockNumber // 등호가 붙은 이유 : 만들어지는 상태이므로 block.number 확인 불가
@@ -109,15 +156,38 @@ contract Lottery{
             // block limit passed (지났을떄) : block.number >= BLOCK_LIMIT + answerBlockNumber
             if (currentBlockStatus == BlockStatus.BlockLimitPassed) {
                 // refund
+                transferAmount = transferAfterPayingFee(b.bettor,BET_AMOUNT);
                 // emit refund
+                emit REFUND(cur, b.bettor, transferAmount, b.challenges, b.answerBlockNumber);
             }
 
             popBet(cur);
-
-
-        
-
         }
+        _head = cur;
+    }
+
+    function transferAfterPayingFee(address payable addr, uint256 amount) internal returns (uint256) {
+        // uint256 fee = amount / 100;
+        uint256 fee = 0; // simple하게 하기 위해 0
+        uint256 amountWithoutFee = amount - fee;
+
+        // transfer to addr
+        addr.transfer(amountWithoutFee);
+
+        // transfer to owner
+        owner.transfer(fee);
+
+        return amountWithoutFee;
+    }
+
+    function setAnswerforTest(bytes32 answer) public returns (bool result) {
+        require(msg.sender == owner, "Only owner can set the answer for test mode");
+        answerForTest = answer;
+        return true;
+    }
+
+    function getAnswerBlockHash(uint256 answerBlockNumber) internal view returns (bytes32 answer) {
+        return mode ? blockhash(answerBlockNumber) : answerForTest;
     }
 
     /*
