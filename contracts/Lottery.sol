@@ -60,6 +60,20 @@ contract Lottery{
         return _pot;
     }
 
+
+    /*
+    * @dev 베팅과 정답체크를 한다. 유저는 0.005ETH를 보내야하고, 베팅용 1 byte 글자를 보낸다.
+    * 큐에 저장된 베팅 정보는 이후 distribute 함수에서 해결된다.
+    * @param challenges 유저가 베팅하는 글자
+    * @return 함수가 잘 수행되었는지 확인하는 bool 값
+    */
+
+    function betAndDistribute(bytes1 challenges) public payable returns (bool result) {
+        bet(challenges);
+        distribute();
+        return true;
+    }
+
     //Bet
 
     /*
@@ -109,12 +123,15 @@ contract Lottery{
             b = _bets[cur];
             currentBlockStatus = getBlockStatus(b.answerBlockNumber);
 
+            // 먼저 BlockStatus 확인 3가지
             // Checkable : (block.number > answerBlockNumber) && (block.number < BLOCK_LIMIT + answerBlockNumber) (현재 블록보다 256 전까지만 확인할 수 있다 이게무슨말이지?)
             if (currentBlockStatus == BlockStatus.Checkable) {
 
                 bytes32 answerBlockHash = getAnswerBlockHash(b.answerBlockNumber);
 
                 currentBettingResult = isMatch(b.challenges,answerBlockHash);
+
+                // Betting 결과에 따른 3가지 
                 // if win , bettor가 pot money 가져감
                 if (currentBettingResult == BettingResult.Win) {
                     // transfer pot
