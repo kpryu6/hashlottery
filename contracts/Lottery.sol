@@ -48,6 +48,8 @@ contract Lottery{
     event FAIL(uint256 index, address bettor, uint256 amount, bytes1 challenges, bytes1 answer, uint256 answerBlockNumber);
     event DRAW(uint256 index, address bettor, uint256 amount, bytes1 challenges, bytes1 answer, uint256 answerBlockNumber);
     event REFUND(uint256 index, address bettor, uint256 amount, bytes1 challenges, uint256 answerBlockNumber);
+
+    
     // Constructor
     constructor() public {
         owner = msg.sender;
@@ -55,7 +57,12 @@ contract Lottery{
 
 
 
-    // getter : smart contract? ?? ??? ???? view
+    /* 
+    view?: function 밖의 변수들을 읽을수 있으나 변경 불가능
+    pure :?function 밖의 변수들을 읽지 못하고, 변경도 불가능
+    view 와 pure 둘다 명시 안할때:?function 밖의 변수들을 읽어서, 변경을 해야함.
+    */
+
     function getPot() public view returns (uint256 pot){
         return _pot;
     }
@@ -291,7 +298,6 @@ contract Lottery{
 
 
     // QUEUE pop
-    // delete?? ????? ?? ???? ??? ???? ???-> delete?? ???? ??? ????
     function popBet(uint256 index) internal returns (bool) {
         delete _bets[index];
         return true;
